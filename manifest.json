@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "omarchy-routine",
+  "name": "Omarchy Routine",
+  "version": "0.1.0",
+  "author": "shivam-g10",
+  "description": "A centered routine strip with current-activity highlighting and a native editor.",
+  "homepage": "https://github.com/shivam-g10/omarchy-routine",
+  "kinds": ["service"],
+  "entryPoints": {
+    "service": "qml/Service.qml"
+  },
+  "license": "MIT"
+}

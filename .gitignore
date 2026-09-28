@@ -1,0 +1,10 @@
+/build/
+/evidence/
+__pycache__/
+*.pyc
+
+# Runtime data and local secrets never belong in the source repository.
+/routines.json
+/routines.*.json
+.env
+.env.*

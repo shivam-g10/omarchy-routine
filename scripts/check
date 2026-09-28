@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd -- "$repo_dir"
+
+./scripts/check-portable
+omarchy plugin validate "$repo_dir"
+
+python3 tests/native_smoke.py
+if [[ -f tests/editor_smoke.py ]]; then
+    python3 tests/editor_smoke.py
+fi
+git diff --check
+printf 'All checks passed.\n'

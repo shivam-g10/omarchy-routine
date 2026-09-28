@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+cd -- "$repo_dir"
+
+TZ=Asia/Kolkata node tests/model_test.mjs
+TZ=America/New_York node tests/model_test.mjs
+for script in scripts/check scripts/check-portable scripts/install-local; do
+    bash -n "$script"
+done
+
+python3 - <<'PY'
+import ast
+import json
+from pathlib import Path
+import re
+
+for path in Path("tests").glob("*.py"):
+    ast.parse(path.read_text(), filename=str(path))
+
+manifest = json.loads(Path("manifest.json").read_text())
+assert manifest["schemaVersion"] == 1
+assert manifest["id"] == "omarchy-routine"
+assert not manifest["id"].startswith("omarchy.")
+assert re.fullmatch(r"\d+\.\d+\.\d+", manifest["version"])
+assert manifest["kinds"] == ["service"]
+assert manifest["license"] == "MIT"
+assert manifest["homepage"] == "https://github.com/shivam-g10/omarchy-routine"
+entry = Path(manifest["entryPoints"]["service"])
+assert not entry.is_absolute() and ".." not in entry.parts and entry.is_file()
+PY
+
+qmlformat_bin=${QMLFORMAT:-}
+if [[ -z $qmlformat_bin ]]; then
+    if command -v qmlformat >/dev/null; then
+        qmlformat_bin=$(command -v qmlformat)
+    else
+        qmlformat_bin=/usr/lib/qt6/bin/qmlformat
+    fi
+fi
+[[ -x $qmlformat_bin ]] || { printf 'qmlformat is required; set QMLFORMAT to its path.\n' >&2; exit 1; }
+while IFS= read -r -d '' qml_file; do
+    "$qmlformat_bin" "$qml_file" >/dev/null
+done < <(find qml tests -name '*.qml' -type f -print0)
+
+git diff --check
+printf 'Portable checks passed.\n'

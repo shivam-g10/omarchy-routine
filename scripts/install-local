@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+plugin_id=omarchy-routine
+plugin_root="$HOME/.config/omarchy/plugins"
+target_dir="$plugin_root/$plugin_id"
+backup_root="$HOME/.local/state/omarchy-routine/backups"
+stage_dir=
+backup_dir=
+previous_enabled=false
+previous_disabled=false
+target_swapped=false
+had_target=false
+
+fail() { printf 'install-local: %s\n' "$*" >&2; exit 1; }
+
+wait_for_discovery() {
+    local attempt current_plugins
+    for attempt in {1..30}; do
+        if current_plugins=$(omarchy-shell shell listPlugins 2>/dev/null) && jq -e --arg id "$plugin_id" 'any(.[]; .id == $id)' <<<"$current_plugins" >/dev/null; then
+            return 0
+        fi
+        sleep 0.1
+    done
+    return 1
+}
+
+for executable in omarchy omarchy-shell jq sha256sum; do
+    command -v "$executable" >/dev/null || fail "Required command is missing: $executable"
+done
+omarchy plugin validate "$repo_dir"
+[[ $(jq -r '.id' "$repo_dir/manifest.json") == "$plugin_id" ]] || fail "Unexpected plugin ID"
+omarchy-shell shell ping >/dev/null
+plugin_list=$(omarchy-shell shell listPlugins)
+previous_enabled=$(jq -r --arg id "$plugin_id" 'any(.[]; .id == $id and .enabled == true)' <<<"$plugin_list")
+
+if [[ -e $target_dir || -L $target_dir ]]; then
+    [[ -d $target_dir && ! -L $target_dir ]] || fail "Refusing to replace a non-directory or symlink: $target_dir"
+    [[ -f $target_dir/manifest.json ]] || fail "Existing directory has no manifest: $target_dir"
+    [[ $(jq -r '.id' "$target_dir/manifest.json") == "$plugin_id" ]] || fail "Existing directory belongs to a different plugin"
+    had_target=true
+fi
+
+cleanup() {
+    local exit_status=$?
+    trap - EXIT
+    if (( exit_status != 0 )) && [[ $target_swapped == true ]]; then
+        printf 'Installation failed; restoring the previous plugin.\n' >&2
+        omarchy plugin disable "$plugin_id" >/dev/null 2>&1 || true
+        if [[ -d $target_dir ]]; then
+            mv -- "$target_dir" "$backup_dir/failed-plugin" || true
+        fi
+        if [[ $had_target == true && -d $backup_dir/plugin ]]; then
+            mv -- "$backup_dir/plugin" "$target_dir" || true
+        fi
+        omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+        if [[ $previous_enabled == true ]]; then
+            if wait_for_discovery; then
+                omarchy plugin enable "$plugin_id" >/dev/null 2>&1 || true
+            fi
+        fi
+    elif (( exit_status != 0 )) && [[ $previous_disabled == true && $previous_enabled == true ]]; then
+        omarchy plugin enable "$plugin_id" >/dev/null 2>&1 || true
+    fi
+    if [[ -n $stage_dir && -d $stage_dir ]]; then
+        rm -rf -- "$stage_dir"
+    fi
+    if (( exit_status != 0 )) && [[ -n $backup_dir ]]; then
+        printf 'Recovery files: %s\n' "$backup_dir" >&2
+    fi
+    exit "$exit_status"
+}
+trap cleanup EXIT
+
+mkdir -p -- "$plugin_root" "$backup_root"
+stage_dir=$(mktemp -d "$plugin_root/.omarchy-routine-stage.XXXXXX")
+# A changed source tree gets a new URL so the running QML engine cannot reuse
+# compiled components from a previous build. Hash both names and file contents.
+build_hash=$(
+    cd -- "$repo_dir/qml"
+    find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -c 1-16
+)
+build_entry="qml/$build_hash/Service.qml"
+jq --arg entry "$build_entry" '.entryPoints.service = $entry' "$repo_dir/manifest.json" >"$stage_dir/manifest.json"
+cp -- "$repo_dir/LICENSE" "$stage_dir/LICENSE"
+mkdir -p -- "$stage_dir/qml/$build_hash"
+cp -R -- "$repo_dir/qml/." "$stage_dir/qml/$build_hash/"
+omarchy plugin validate "$stage_dir"
+
+backup_dir=$(mktemp -d "$backup_root/$(date +%Y%m%d-%H%M%S).XXXXXX")
+if [[ -e $HOME/.config/omarchy/shell.json || -L $HOME/.config/omarchy/shell.json ]]; then
+    cp -a -- "$HOME/.config/omarchy/shell.json" "$backup_dir/shell.json"
+fi
+routine_path="$HOME/.config/omarchy/routines.json"
+if [[ -e $routine_path || -L $routine_path ]]; then
+    [[ -f $routine_path ]] || fail "Routine data is not a readable regular file: $routine_path"
+    # Copy the contents of symlink targets too. Keep this snapshot for manual
+    # recovery; rollback must not overwrite edits made after installation starts.
+    cp --dereference -- "$routine_path" "$backup_dir/routines.json"
+fi
+printf '%s\n' "$previous_enabled" >"$backup_dir/previously-enabled"
+if [[ $had_target == true ]]; then
+    omarchy plugin disable "$plugin_id" >/dev/null
+    previous_disabled=true
+    mv -- "$target_dir" "$backup_dir/plugin"
+fi
+target_swapped=true
+mv -- "$stage_dir" "$target_dir"
+stage_dir=
+omarchy-shell shell rescanPlugins
+wait_for_discovery || fail "The shell did not discover the plugin"
+omarchy plugin enable "$plugin_id"
+
+# Registration can complete one event-loop turn after enable returns.
+running=false
+for attempt in {1..20}; do
+    if status=$(omarchy-shell "$plugin_id" status 2>/dev/null) && jq -e 'type == "object" and has("ready")' <<<"$status" >/dev/null; then
+        running=true
+        break
+    fi
+    sleep 0.1
+done
+[[ $running == true ]] || fail "The routine service did not register its status endpoint"
+
+printf 'Installed: %s\nBuild: %s\nBackup: %s\n' "$target_dir" "$build_hash" "$backup_dir"
+printf 'Click the cog at the far right to edit. Save writes ~/.config/omarchy/routines.json.\n'
