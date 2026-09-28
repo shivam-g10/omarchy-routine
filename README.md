@@ -5,45 +5,41 @@ theme's primary text color; the rest stay muted. Each row is centered on the
 screen. A settings cog at the far right opens the editor; hovering does not open
 a popup. There are no completion checkboxes, accounts, or calendar services.
 
-This is a proof of concept built with QML and embedded JavaScript inside the
-existing Omarchy Quickshell process. It shares one minute clock across displays
-and creates the editor only when needed. No additional resident
-process or backend is required.
+The plugin runs entirely inside Omarchy's existing Quickshell process. Its QML
+components import `RoutineLogic.js` through Qt's built-in JavaScript engine, the
+same pattern used by Omarchy's own plugins. Users need no Node.js, Python, npm
+packages, compilation, helper service, or custom setup script. It shares one
+minute clock across displays and creates the editor only when needed.
 
 ## Install
 
 Run inside an existing Omarchy desktop session with its Quickshell shell running:
 
 ```sh
-git clone https://github.com/shivam-g10/omarchy-routine.git
-cd omarchy-routine
-./scripts/install-local
+omarchy plugin add https://github.com/shivam-g10/omarchy-routine.git --enable
 ```
 
 The plugin ID is `omarchy-routine`. It requires an Omarchy desktop with the
 Quickshell shell and its native plugin API; it does not run as a standalone app.
 
-The installer copies the manifest, license, and QML to
-`~/.config/omarchy/plugins/omarchy-routine`, validates them, then rescans and enables
-the plugin through Omarchy's CLI. It does not restart the shell. Re-run it after
-changing the source. Installed QML lives under `qml/<source-hash>/`; the staged
-manifest points there so changed builds receive fresh component URLs in the
-running shell. The repository manifest stays unchanged.
+Omarchy clones the repository into `~/.config/omarchy/plugins/omarchy-routine`,
+validates its manifest, and enables it in the running shell. There is no second
+installation step. The native installer does not execute repository scripts.
 
-Before replacement the installer saves the previous plugin, `shell.json`, and
-any existing `routines.json` under `~/.local/state/omarchy-routine/backups/` and
-prints the private backup directory's path. The routine backup contains the file's
-contents even when the original path is a symlink.
-If installation fails, it attempts to restore this plugin's code and enabled
-state. Configuration and routine snapshots are retained for manual recovery;
-automatic recovery does not overwrite shell settings or routine edits made since
-the backup.
+Update an installation made with that command:
+
+```sh
+omarchy plugin update omarchy-routine
+```
 
 Disable the strip without deleting the saved routine:
 
 ```sh
 omarchy plugin disable omarchy-routine
 ```
+
+Remove the plugin with `omarchy plugin remove omarchy-routine`. Routine data is
+stored separately, so disabling or removing the plugin preserves it.
 
 ## Use
 
@@ -96,10 +92,19 @@ omarchy-shell omarchy-routine status
 omarchy-shell omarchy-routine reload
 ```
 
-## Check the source
+## Development
 
-The development checks require Node.js, Python 3, Qt's `qmlformat`, and the already
-installed Omarchy and Quickshell tools. They do not install packages.
+The development workflow follows the [Omarchy plugin development
+guide](https://plugins.omarchy.org/develop.html) and [official shell
+reference](https://github.com/omacom/omarchy/blob/quattro/docs/omarchy-shell.md).
+QML's [JavaScript resource
+imports](https://doc.qt.io/qt-6/qtqml-javascript-imports.html) run in the QML engine;
+they do not introduce a Node.js runtime dependency.
+
+Running the checks additionally requires Node.js, Python 3, and Qt's `qmlformat`.
+These test-only tools are not needed to install or use the plugin. Native tests
+also use the existing Omarchy and Quickshell installation. The checks do not
+install packages.
 
 ```sh
 ./scripts/check
@@ -113,6 +118,19 @@ This checks schedule resolution in two time zones, the plugin manifest, QML
 parsing, native offscreen persistence and strip geometry, scoped editor behavior,
 large-routine layout, and whitespace errors. See [tests/README.md](tests/README.md)
 for the native harness's isolation and validation boundaries.
+
+### Optional development deployment
+
+`./scripts/install-local` is an optional helper for testing an edited working
+tree. Normal installations use `omarchy plugin add` above. The helper copies the
+runtime files, backs up the previous plugin and local configuration under
+`~/.local/state/omarchy-routine/backups/`, and assigns changed QML fresh URLs to
+avoid stale components during rapid development. It preserves routine data and
+attempts to restore the prior plugin if installation fails.
+
+This development copy is not a Git checkout, so `omarchy plugin update` does not
+apply to it. Do not run the helper over a normal Git-managed installation unless
+you intend to replace it with a development copy.
 
 ## PoC limits
 
