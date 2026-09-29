@@ -5,6 +5,10 @@ theme's primary text color; the rest stay muted. Each row is centered on the
 screen. A settings cog at the far right opens the editor; hovering does not open
 a popup. There are no completion checkboxes, accounts, or calendar services.
 
+![Omarchy Routine showing the current activity and a Monday routine editor](preview.png)
+
+*Native QML preview with a fictional example routine.*
+
 The plugin runs entirely inside Omarchy's existing Quickshell process. Its QML
 components import `RoutineLogic.js` through Qt's built-in JavaScript engine, the
 same pattern used by Omarchy's own plugins. Users need no Node.js, Python, npm
