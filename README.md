@@ -1,13 +1,16 @@
 # Omarchy Routine
 
-A daily reference strip for the Omarchy desktop. The current activity uses the
-theme's primary text color; the rest stay muted. Each row is centered on the
-screen. A settings cog at the far right opens the editor; hovering does not open
-a popup. There are no completion checkboxes, accounts, or calendar services.
+An always-on routine viewer for the Omarchy desktop. Your whole day's routine
+stays in a thin strip beside the desktop bar while you work. The current activity
+uses the theme's primary text color; the rest stay muted. The highlight follows
+the time automatically, so you can glance at your routine and carry on.
 
-![Omarchy Routine showing the current activity and a Monday routine editor](preview.png)
+![Omarchy Routine displaying the whole day beside the desktop bar, with the current activity highlighted](preview.png)
 
-*Native QML preview with a fictional example routine.*
+*Native routine strip with a fictional example routine and illustrative desktop.*
+
+Each row is centered on the screen. A settings cog at the far right opens the
+editor. There are no completion checkboxes, accounts, or calendar services.
 
 The plugin runs entirely inside Omarchy's existing Quickshell process. Its QML
 components import `RoutineLogic.js` through Qt's built-in JavaScript engine, the
